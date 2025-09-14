@@ -10,7 +10,7 @@ import { useOnlineStatus } from '../../hooks/useOnline';
 import { t } from '../../utils/translations';
 import { api } from '../../utils/api';
 import type { Stock } from '../../types';
-import { Search, Package, AlertTriangle, Edit, Plus } from 'lucide-react';
+import { Search, Package, Edit, Plus } from 'lucide-react';
 
 interface PharmacyDashboardProps {
   onUpdateStock: (stock: Stock) => void;
@@ -41,9 +41,6 @@ export function PharmacyDashboard({
   const [newMedicineQty, setNewMedicineQty] = useState<number | ''>('');
   const [isAdding, setIsAdding] = useState(false);
 
-  const lastUpdateToday = stock.some(item => 
-    new Date(item.last_updated_at).toDateString() === new Date().toDateString()
-  );
 
   useEffect(() => {
     loadStock();
@@ -95,7 +92,6 @@ export function PharmacyDashboard({
     item.medicine_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const outOfStockCount = stock.filter(item => item.out_of_stock || item.quantity === 0).length;
 
   const handleQuickUpdate = async (stockItem: Stock, newQuantity: number) => {
     try {
@@ -179,8 +175,7 @@ export function PharmacyDashboard({
     }
 
     const now = new Date();
-    const newStock: Stock = {
-      id: `stock-${Date.now()}`,
+    const newStock: Partial<Stock> = {
       pharmacy_id: user.pharmacy_id,
       medicine_id: `med-${Date.now()}`,
       medicine_name: trimmedName,
@@ -234,26 +229,6 @@ export function PharmacyDashboard({
       
       <main className="app-container px-4 py-4 lg:py-8">
         <div className="space-y-6 lg:space-y-8">
-            {/* Update Status Banner */}
-            {!lastUpdateToday && (
-              <Card className="bg-yellow-50 border-yellow-200 p-4 lg:p-6">
-                <div className="flex items-center space-x-3">
-                  <AlertTriangle className="w-5 h-5 text-yellow-600" />
-                  <div className="flex-1">
-                    <p className="text-yellow-800 font-medium">
-                      {t('not_updated_today', language)}
-                    </p>
-                  </div>
-                  <Button
-                    onClick={onBulkUpdate}
-                    variant="secondary"
-                    size="sm"
-                  >
-                    {t('update_now', language)}
-                  </Button>
-                </div>
-              </Card>
-            )}
 
             {/* Search Bar */}
             <div className="relative">
@@ -291,30 +266,6 @@ export function PharmacyDashboard({
             </Card>
 
             {/* Stock Overview */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-              <Card className="text-center p-4 lg:p-6">
-                <div className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">{stock.length}</div>
-                <div className="text-sm lg:text-base text-gray-600">Total Medicines</div>
-              </Card>
-              <Card className="text-center p-4 lg:p-6">
-                <div className={`text-2xl lg:text-3xl font-bold mb-2 ${outOfStockCount > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {outOfStockCount}
-                </div>
-                <div className="text-sm lg:text-base text-gray-600">Out of Stock</div>
-              </Card>
-              <Card className="text-center p-4 lg:p-6 hidden lg:block">
-                <div className="text-2xl lg:text-3xl font-bold text-blue-600 mb-2">
-                  {stock.filter(item => !item.out_of_stock && item.quantity > 0).length}
-                </div>
-                <div className="text-sm lg:text-base text-gray-600">Available</div>
-              </Card>
-              <Card className="text-center p-4 lg:p-6 hidden lg:block">
-                <div className="text-2xl lg:text-3xl font-bold text-green-600 mb-2">
-                  {lastUpdateToday ? 'Today' : 'Pending'}
-                </div>
-                <div className="text-sm lg:text-base text-gray-600">Last Update</div>
-              </Card>
-            </div>
 
             {/* Medicine List */}
             <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0">

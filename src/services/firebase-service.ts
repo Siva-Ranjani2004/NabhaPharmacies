@@ -52,12 +52,7 @@ export class FirebaseService {
       
       const userData = userDoc.data() as FirestoreUser;
       
-      // Check if account is pending verification
-      if (userData.account_status === 'pending_verification') {
-        // Sign out the user immediately
-        await signOut(auth);
-        throw new Error('Account is pending verification. Please check your email and verify your account before logging in.');
-      }
+      // Account verification check removed - users can login immediately
       
       const user: User = {
         id: userData.uid,
@@ -227,31 +222,43 @@ export class FirebaseService {
         const medicineId = `med-${Date.now()}`;
         
         // First, create the medicine in pharmacy's medicine collection
-        const medicineData = {
+        const medicineData: any = {
           id: medicineId,
           name: stock.medicine_name!,
-          generic_name: stock.generic_name,
           unit: stock.unit!,
-          pack_size: stock.pack_size,
-          category: stock.category,
           created_at: serverTimestamp(),
           updated_at: serverTimestamp()
         };
         
+        // Only add fields that are not undefined
+        if (stock.generic_name !== undefined) medicineData.generic_name = stock.generic_name;
+        if (stock.pack_size !== undefined) medicineData.pack_size = stock.pack_size;
+        if (stock.category !== undefined) medicineData.category = stock.category;
+        
         await setDoc(doc(db, SUBCOLLECTIONS.PHARMACY_MEDICINES(pharmacyId), medicineId), medicineData);
         
-        // Then create the stock entry
-        const newStockData = {
-          ...stock,
+        // Then create the stock entry - filter out undefined values
+        const cleanStockData: any = {
+          pharmacy_id: stock.pharmacy_id,
           medicine_id: medicineId,
+          medicine_name: stock.medicine_name,
+          quantity: stock.quantity,
+          unit: stock.unit,
+          out_of_stock: stock.out_of_stock,
+          last_updated_by: stock.last_updated_by,
           last_updated_at: serverTimestamp(),
           created_at: serverTimestamp(),
           version: 0
         };
         
-        const docRef = await addDoc(collection(db, SUBCOLLECTIONS.PHARMACY_STOCK(pharmacyId)), newStockData);
+        // Only add optional fields if they're not undefined
+        if (stock.generic_name !== undefined) cleanStockData.generic_name = stock.generic_name;
+        if (stock.pack_size !== undefined) cleanStockData.pack_size = stock.pack_size;
+        if (stock.category !== undefined) cleanStockData.category = stock.category;
+        
+        const docRef = await addDoc(collection(db, SUBCOLLECTIONS.PHARMACY_STOCK(pharmacyId)), cleanStockData);
         stockRef = docRef;
-        updatedData = { ...newStockData, id: docRef.id };
+        updatedData = { ...cleanStockData, id: docRef.id };
       }
       
       // Create activity log
@@ -383,14 +390,9 @@ export class FirebaseService {
         // Immediately sign out the new user to prevent them from staying logged in
         await signOut(auth);
         
-        // Send email verification to the new user
-        // This will require them to verify their email before they can log in
-        await sendPasswordResetEmail(auth, requestData.email);
+        // Account created successfully
         
-        // Set a flag in localStorage to indicate a new account was created
-        localStorage.setItem('newAccountCreated', 'true');
-        
-        console.log('New pharmacy account created. User must verify email before logging in.');
+        console.log('New pharmacy account created with temporary password:', tempPassword);
       } catch (error: any) {
         if (error.code === 'auth/email-already-in-use') {
           // Account already exists - this means the registration was already processed
@@ -438,16 +440,12 @@ export class FirebaseService {
           role: 'pharmacy',
           pharmacy_id: pharmacyId,
           preferred_language: 'en',
-          account_status: 'pending_verification', // Account is disabled until email verification
           created_at: serverTimestamp(),
           updated_at: serverTimestamp()
         };
 
         await setDoc(doc(db, COLLECTIONS.USERS, firebaseUser.uid), userData);
       }
-
-      // Send password reset email so they can set their own password
-      await sendPasswordResetEmail(auth, requestData.email);
 
       // Send credentials email notification
       let emailSent = false;

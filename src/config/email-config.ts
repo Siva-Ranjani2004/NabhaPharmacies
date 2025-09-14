@@ -82,4 +82,3 @@ EmailJS Setup Instructions:
 
 Note: EmailJS is free for up to 200 emails per month.
 `;
-

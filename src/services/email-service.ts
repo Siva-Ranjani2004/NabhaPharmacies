@@ -40,8 +40,17 @@ export class EmailService {
         admin_name: data.adminName,
         admin_email: data.adminEmail,
         login_url: window.location.origin + '/login',
-        support_email: 'admin@nabha.gov.in'
+        support_email: 'admin@nabha.gov.in',
+        password_reset_url: window.location.origin + '/login?reset=true',
+        // Add explicit recipient fields for EmailJS
+        user_email: data.email,
+        recipient_email: data.email,
+        email: data.email
       };
+
+      console.log('Sending email with params:', templateParams);
+      console.log('Service ID:', EMAIL_CONFIG.SERVICE_ID);
+      console.log('Template ID:', EMAIL_CONFIG.TEMPLATE_ID_CREDENTIALS);
 
       const result = await emailjs.send(
         EMAIL_CONFIG.SERVICE_ID,
@@ -59,6 +68,7 @@ export class EmailService {
         text: error.text,
         response: error.response
       });
+      console.error('Full error object:', error);
       return false;
     }
   }
@@ -107,6 +117,7 @@ export class EmailService {
     }
 
     try {
+      // Test with minimal parameters first
       const testParams = {
         to_email: 'test@example.com',
         to_name: 'Test User',
@@ -116,8 +127,17 @@ export class EmailService {
         admin_name: 'Test Admin',
         admin_email: 'admin@test.com',
         login_url: 'https://test.com/login',
-        support_email: 'support@test.com'
+        support_email: 'support@test.com',
+        password_reset_url: 'https://test.com/login?reset=true',
+        // Add explicit recipient fields for EmailJS
+        user_email: 'test@example.com',
+        recipient_email: 'test@example.com',
+        email: 'test@example.com'
       };
+
+      console.log('Testing EmailJS with params:', testParams);
+      console.log('Service ID:', EMAIL_CONFIG.SERVICE_ID);
+      console.log('Template ID:', EMAIL_CONFIG.TEMPLATE_ID_CREDENTIALS);
 
       const result = await emailjs.send(
         EMAIL_CONFIG.SERVICE_ID,
@@ -129,9 +149,10 @@ export class EmailService {
       return { success: true };
     } catch (error) {
       console.error('EmailJS test failed:', error);
+      console.error('Full error object:', error);
       return { 
         success: false, 
-        error: `Status: ${error.status}, Message: ${error.message}` 
+        error: `Status: ${error.status}, Message: ${error.message}, Text: ${error.text}` 
       };
     }
   }

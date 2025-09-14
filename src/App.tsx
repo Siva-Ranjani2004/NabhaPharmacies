@@ -44,15 +44,6 @@ function App() {
     console.log('User state changed:', user, 'Current screen:', currentScreen);
     
     if (user) {
-      // Check if this is a newly created account that should be pending verification
-      const newAccountFlag = localStorage.getItem('newAccountCreated');
-      if (newAccountFlag === 'true') {
-        console.log('New account detected, staying on home page');
-        localStorage.removeItem('newAccountCreated'); // Clear the flag
-        // Don't redirect, stay on home page
-        return;
-      }
-      
       // If user just logged in from login/register page, redirect to appropriate dashboard
       if (currentScreen === 'login' || currentScreen === 'register') {
         console.log('Redirecting from login/register to dashboard');
