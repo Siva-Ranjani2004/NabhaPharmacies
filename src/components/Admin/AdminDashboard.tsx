@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
 import { t } from '../../utils/translations';
 import { api } from '../../utils/api';
+import { emailService } from '../../services/email-service';
 import type { Pharmacy, RegistrationRequest } from '../../types';
 import { 
   Search, 
@@ -15,7 +16,8 @@ import {
   FileText,
   Eye,
   Check,
-  X
+  X,
+  TestTube
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -32,6 +34,7 @@ export function AdminDashboard({ onPharmacyDetail, onReports, onHomeClick }: Adm
   const [pharmacies, setPharmacies] = useState<Pharmacy[]>([]);
   const [requests, setRequests] = useState<RegistrationRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [testingEmail, setTestingEmail] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -55,10 +58,22 @@ export function AdminDashboard({ onPharmacyDetail, onReports, onHomeClick }: Adm
 
   const handleApproveRequest = async (requestId: string) => {
     try {
-      await api.approveRegistrationRequest(requestId, 'Approved after verification');
+      const result = await api.approveRegistrationRequest(requestId, 'Approved after verification', user || undefined);
+      
+      // Find the request to get pharmacy name
+      const request = requests.find(req => req.id === requestId);
+      
+      // Show success message
+      if (result.emailSent) {
+        alert(`Pharmacy "${request?.pharmacy_name || 'Unknown'}" approved successfully! Credentials have been sent via email.\n\nThe pharmacy owner must verify their email before they can log in.`);
+      } else {
+        alert(`Pharmacy "${request?.pharmacy_name || 'Unknown'}" approved successfully! Please contact the pharmacy owner to provide their login credentials.\n\nThe pharmacy owner must verify their email before they can log in.`);
+      }
+      
       await loadData();
     } catch (error) {
       console.error('Failed to approve request:', error);
+      alert('Failed to approve request. Please try again.');
     }
   };
 
@@ -71,6 +86,23 @@ export function AdminDashboard({ onPharmacyDetail, onReports, onHomeClick }: Adm
       await loadData();
     } catch (error) {
       console.error('Failed to reject request:', error);
+    }
+  };
+
+  const testEmailService = async () => {
+    setTestingEmail(true);
+    try {
+      const result = await emailService.testEmailJS();
+      if (result.success) {
+        alert('EmailJS test successful! Check console for details.');
+      } else {
+        alert(`EmailJS test failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Email test error:', error);
+      alert('Email test failed. Check console for details.');
+    } finally {
+      setTestingEmail(false);
     }
   };
 
@@ -325,12 +357,24 @@ export function AdminDashboard({ onPharmacyDetail, onReports, onHomeClick }: Adm
                     <FileText className="w-5 h-5 mr-3" />
                   {t('reports', language)}
                 </Button>
+                
+                <Button
+                  onClick={testEmailService}
+                  variant="ghost"
+                  fullWidth
+                  className="justify-center py-4 text-lg font-semibold"
+                  loading={testingEmail}
+                >
+                    <TestTube className="w-5 h-5 mr-3" />
+                  Test Email Service
+                </Button>
               </div>
             </Card>
             </div>
           </div>
         </div>
       </main>
+
     </div>
   );
 }

@@ -1,0 +1,131 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isPharmacy() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'pharmacy';
+    }
+    
+    function isOwner(pharmacyId) {
+      return isPharmacy() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.pharmacy_id == pharmacyId;
+    }
+    
+    function isValidUser() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Users collection - users can read/write their own data
+    match /users/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      allow read: if isAdmin(); // Admins can read all users
+    }
+
+    // Pharmacies collection
+    match /pharmacies/{pharmacyId} {
+      // Admins can read/write all pharmacies
+      allow read, write: if isAdmin();
+      
+      // Pharmacy owners can read their own pharmacy data
+      allow read: if isOwner(pharmacyId);
+      
+      // Pharmacy owners can update their own pharmacy data (limited fields)
+      allow update: if isOwner(pharmacyId) && 
+                      request.resource.data.keys().hasAll(['name', 'owner_name', 'email', 'address', 'updated_at']) &&
+                      request.resource.data.status == resource.data.status; // Can't change status
+    }
+
+    // Medicines subcollection under each pharmacy
+    match /pharmacies/{pharmacyId}/medicines/{medicineId} {
+      // Admins can read/write all medicines
+      allow read, write: if isAdmin();
+      
+      // Pharmacy owners can read/write their own medicines
+      allow read, write: if isOwner(pharmacyId);
+    }
+
+    // Stock subcollection under each pharmacy
+    match /pharmacies/{pharmacyId}/stock/{stockId} {
+      // Admins can read/write all stock
+      allow read, write: if isAdmin();
+      
+      // Pharmacy owners can read/write their own stock
+      allow read, write: if isOwner(pharmacyId);
+    }
+
+    // Activity logs subcollection under each pharmacy
+    match /pharmacies/{pharmacyId}/activity-logs/{logId} {
+      // Admins can read/write all activity logs
+      allow read, write: if isAdmin();
+      
+      // Pharmacy owners can read/write their own activity logs
+      allow read, write: if isOwner(pharmacyId);
+    }
+
+    // Medicines collection (master data)
+    match /medicines/{medicineId} {
+      // Everyone can read medicines
+      allow read: if isAuthenticated();
+      
+      // Only admins can write medicines
+      allow write: if isAdmin();
+    }
+
+    // Registration requests collection
+    match /registration-requests/{requestId} {
+      // Admins can read/write all requests
+      allow read, write: if isAdmin();
+      
+      // Anyone can create new requests
+      allow create: if true;
+      
+      // Request creators can read their own requests
+      allow read: if isAuthenticated() && 
+                     resource.data.email == request.auth.token.email;
+    }
+
+    // Global stock collection (for admin overview)
+    match /stock/{stockId} {
+      // Admins can read/write all stock
+      allow read, write: if isAdmin();
+      
+      // Pharmacy owners can read/write their own stock
+      allow read, write: if isAuthenticated() && 
+                         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'pharmacy' &&
+                         resource.data.pharmacy_id == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.pharmacy_id;
+      
+      // Pharmacy owners can create new stock items for their pharmacy
+      allow create: if isAuthenticated() && 
+                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'pharmacy' &&
+                    request.resource.data.pharmacy_id == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.pharmacy_id;
+    }
+
+    // Global activity logs (for admin overview)
+    match /activity-logs/{logId} {
+      // Admins can read/write all activity logs
+      allow read, write: if isAdmin();
+      
+      // Pharmacy owners can read their own activity logs
+      allow read: if isAuthenticated() && 
+                  get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'pharmacy' &&
+                  resource.data.pharmacy_id == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.pharmacy_id;
+      
+      // Pharmacy owners can create activity logs for their pharmacy
+      allow create: if isAuthenticated() && 
+                    get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'pharmacy' &&
+                    request.resource.data.pharmacy_id == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.pharmacy_id;
+    }
+  }
+}
+

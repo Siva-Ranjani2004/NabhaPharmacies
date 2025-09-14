@@ -76,8 +76,8 @@ export function RegisterPage({ onBack, onHomeClick }: RegisterPageProps) {
                 <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
                   <li>Your request is now visible to the admin</li>
                   <li>Admin will visit your pharmacy for verification</li>
-                  <li>Once approved, you'll receive login credentials via email</li>
-                  <li>You can then start updating your medicine stock daily</li>
+                  <li>Once approved, admin will provide you with login credentials</li>
+                  <li>You can then login and start updating your medicine stock daily</li>
                 </ol>
               </div>
               
@@ -87,6 +87,7 @@ export function RegisterPage({ onBack, onHomeClick }: RegisterPageProps) {
                   <li>Keep your pharmacy open during business hours for admin visit</li>
                   <li>Have your pharmacy license and documents ready</li>
                   <li>Admin may contact you to schedule the visit</li>
+                  <li>After approval, contact admin to get your login credentials</li>
                 </ul>
               </div>
             </div>

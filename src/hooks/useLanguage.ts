@@ -7,13 +7,16 @@ interface LanguageContextType {
   setLanguage: (lang: Language) => void;
 }
 
-const LanguageContext = createContext<LanguageContextType | null>(null);
+// Create a default context value
+const defaultLanguageContext: LanguageContextType = {
+  language: 'en',
+  setLanguage: () => {}
+};
+
+const LanguageContext = createContext<LanguageContextType>(defaultLanguageContext);
 
 export function useLanguage() {
   const context = useContext(LanguageContext);
-  if (!context) {
-    throw new Error('useLanguage must be used within LanguageProvider');
-  }
   return context;
 }
 

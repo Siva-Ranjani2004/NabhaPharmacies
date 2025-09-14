@@ -3,6 +3,10 @@ import { Button } from '../UI/Button';
 import { Header } from '../Layout/Header';
 import { ContactModal } from '../Modals/ContactModal';
 import { LearnModal } from '../Modals/LearnModal';
+import { FirebaseTest } from '../Test/FirebaseTest';
+import { DatabaseSetup } from '../Test/DatabaseSetup';
+import { AuthTest } from '../Test/AuthTest';
+import { IntegrationTest } from '../Test/IntegrationTest';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useAuth } from '../../hooks/useAuth';
 import { t } from '../../utils/translations';
@@ -87,6 +91,34 @@ export function HomePage({ onLoginClick, onRegisterClick, onDashboardClick }: Ho
                   </div>
                   <h3 className="text-lg font-semibold text-gray-900">{t('monitored_by', language)}</h3>
                   <p className="text-gray-600 text-center text-sm">Government oversight and compliance</p>
+                </div>
+              </div>
+
+              {/* Firebase Connection Test */}
+              <div className="space-y-8">
+                <div className="max-w-md mx-auto">
+                  <FirebaseTest />
+                </div>
+              </div>
+
+              {/* Database Setup */}
+              <div className="space-y-8">
+                <div className="max-w-md mx-auto">
+                  <DatabaseSetup />
+                </div>
+              </div>
+
+              {/* Firebase Auth Test */}
+              <div className="space-y-8">
+                <div className="max-w-md mx-auto">
+                  <AuthTest />
+                </div>
+              </div>
+
+              {/* Integration Test */}
+              <div className="space-y-8">
+                <div className="max-w-md mx-auto">
+                  <IntegrationTest />
                 </div>
               </div>
 

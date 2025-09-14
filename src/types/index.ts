@@ -32,12 +32,16 @@ export interface Stock {
   pharmacy_id: string;
   medicine_id: string;
   medicine_name: string;
+  generic_name?: string;
   quantity: number;
   unit: string;
+  pack_size?: string;
+  category?: string;
   out_of_stock: boolean;
   last_updated_by: string;
   last_updated_at: Date;
   version: number;
+  created_at?: Date;
 }
 
 export interface ActivityLog {
