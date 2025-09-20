@@ -590,6 +590,235 @@ export class FirebaseService {
     }
   }
 
+  // Analytics and reporting methods
+  async getAnalyticsData(dateRange?: { start: Date; end: Date }): Promise<{
+    totalPharmaciesUpdated: number;
+    totalOutOfStockMedicines: number;
+    mostRequestedMedicines: string[];
+    outOfStockFrequency: { medicine: string; frequency: number }[];
+    dailyUpdatesTrend: { date: string; count: number }[];
+    detailedData: {
+      pharmacyName: string;
+      date: string;
+      outOfStockCount: number;
+      lastUpdateTime: string;
+    }[];
+  }> {
+    try {
+      // Get all pharmacies
+      const pharmaciesSnapshot = await getDocs(collection(db, COLLECTIONS.PHARMACIES));
+      const pharmacies = pharmaciesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      let totalOutOfStockMedicines = 0;
+      const outOfStockFrequency: { [medicine: string]: number } = {};
+      const dailyUpdatesTrend: { [date: string]: number } = {};
+      const detailedData: any[] = [];
+      const mostRequestedMedicines: string[] = [];
+
+      // Process each pharmacy's stock data
+      for (const pharmacy of pharmacies) {
+        try {
+          const stockSnapshot = await getDocs(collection(db, SUBCOLLECTIONS.PHARMACY_STOCK(pharmacy.id)));
+          
+          if (stockSnapshot.docs.length === 0) continue;
+
+          // Check if it's the new structure (one document with all medicines)
+          const stockDoc = stockSnapshot.docs[0];
+          const data = stockDoc.data();
+          
+          let stockItems: any[] = [];
+          
+          if (data.medicines && typeof data.medicines === 'object') {
+            // New structure: one document with medicines object
+            for (const [medicineId, medicineData] of Object.entries(data.medicines)) {
+              stockItems.push({
+                medicine_name: (medicineData as any).medicine_name || '',
+                out_of_stock: (medicineData as any).out_of_stock || false,
+                last_updated_at: data.last_updated_at?.toDate() || new Date()
+              });
+            }
+          } else {
+            // Old structure: individual documents per medicine
+            stockItems = stockSnapshot.docs.map(doc => {
+              const docData = doc.data();
+              return {
+                medicine_name: docData.medicine_name,
+                out_of_stock: docData.out_of_stock,
+                last_updated_at: docData.last_updated_at?.toDate() || new Date()
+              };
+            });
+          }
+
+          // Count out of stock medicines for this pharmacy
+          const outOfStockCount = stockItems.filter(item => item.out_of_stock).length;
+          totalOutOfStockMedicines += outOfStockCount;
+
+          // Track out of stock frequency
+          stockItems.forEach(item => {
+            if (item.out_of_stock) {
+              outOfStockFrequency[item.medicine_name] = (outOfStockFrequency[item.medicine_name] || 0) + 1;
+            }
+          });
+
+          // Track daily updates
+          const updateDate = stockItems[0]?.last_updated_at?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0];
+          dailyUpdatesTrend[updateDate] = (dailyUpdatesTrend[updateDate] || 0) + 1;
+
+          // Add to detailed data
+          if (outOfStockCount > 0) {
+            detailedData.push({
+              pharmacyName: pharmacy.name,
+              date: updateDate,
+              outOfStockCount,
+              lastUpdateTime: stockItems[0]?.last_updated_at?.toLocaleTimeString() || 'Unknown'
+            });
+          }
+        } catch (error) {
+          console.error(`Error processing pharmacy ${pharmacy.id}:`, error);
+        }
+      }
+
+      // Sort and format data
+      const sortedOutOfStockFrequency = Object.entries(outOfStockFrequency)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 10)
+        .map(([medicine, frequency]) => ({ medicine, frequency }));
+
+      const sortedDailyTrend = Object.entries(dailyUpdatesTrend)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, count]) => ({ date, count }));
+
+      // Get most requested medicines (top 3 from out of stock frequency)
+      const topMedicines = sortedOutOfStockFrequency.slice(0, 3).map(item => item.medicine);
+
+      return {
+        totalPharmaciesUpdated: pharmacies.length,
+        totalOutOfStockMedicines,
+        mostRequestedMedicines: topMedicines,
+        outOfStockFrequency: sortedOutOfStockFrequency,
+        dailyUpdatesTrend: sortedDailyTrend,
+        detailedData: detailedData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      };
+    } catch (error) {
+      console.error('Error getting analytics data:', error);
+      throw error;
+    }
+  }
+
+  // Out-of-stock notification methods
+  async checkOutOfStockNotifications(): Promise<{
+    outOfStockItems: Array<{
+      pharmacyId: string;
+      pharmacyName: string;
+      medicineName: string;
+      lastUpdated: Date;
+    }>;
+    totalCount: number;
+  }> {
+    try {
+      const outOfStockItems: any[] = [];
+      
+      // Get all pharmacies
+      const pharmaciesSnapshot = await getDocs(collection(db, COLLECTIONS.PHARMACIES));
+      
+      for (const pharmacyDoc of pharmaciesSnapshot.docs) {
+        const pharmacy = { id: pharmacyDoc.id, ...pharmacyDoc.data() };
+        
+        try {
+          const stockSnapshot = await getDocs(collection(db, SUBCOLLECTIONS.PHARMACY_STOCK(pharmacy.id)));
+          
+          if (stockSnapshot.docs.length === 0) continue;
+
+          // Check if it's the new structure (one document with all medicines)
+          const stockDoc = stockSnapshot.docs[0];
+          const data = stockDoc.data();
+          
+          let stockItems: any[] = [];
+          
+          if (data.medicines && typeof data.medicines === 'object') {
+            // New structure: one document with medicines object
+            for (const [medicineId, medicineData] of Object.entries(data.medicines)) {
+              stockItems.push({
+                medicine_name: (medicineData as any).medicine_name || '',
+                out_of_stock: (medicineData as any).out_of_stock || false,
+                last_updated_at: data.last_updated_at?.toDate() || new Date()
+              });
+            }
+          } else {
+            // Old structure: individual documents per medicine
+            stockItems = stockSnapshot.docs.map(doc => {
+              const docData = doc.data();
+              return {
+                medicine_name: docData.medicine_name,
+                out_of_stock: docData.out_of_stock,
+                last_updated_at: docData.last_updated_at?.toDate() || new Date()
+              };
+            });
+          }
+
+          // Find out of stock items
+          stockItems.forEach(item => {
+            if (item.out_of_stock) {
+              outOfStockItems.push({
+                pharmacyId: pharmacy.id,
+                pharmacyName: pharmacy.name,
+                medicineName: item.medicine_name,
+                lastUpdated: item.last_updated_at
+              });
+            }
+          });
+        } catch (error) {
+          console.error(`Error checking stock for pharmacy ${pharmacy.id}:`, error);
+        }
+      }
+
+      return {
+        outOfStockItems: outOfStockItems.sort((a, b) => b.lastUpdated.getTime() - a.lastUpdated.getTime()),
+        totalCount: outOfStockItems.length
+      };
+    } catch (error) {
+      console.error('Error checking out of stock notifications:', error);
+      throw error;
+    }
+  }
+
+  async sendOutOfStockNotification(adminEmail: string, outOfStockData: any): Promise<boolean> {
+    try {
+      console.log('Out of stock notification:', {
+        adminEmail,
+        totalOutOfStock: outOfStockData.totalCount,
+        items: outOfStockData.outOfStockItems.slice(0, 5) // First 5 items
+      });
+      
+      // Send email notification using the email service
+      const emailData = {
+        adminEmail,
+        adminName: 'Admin', // You might want to get this from user data
+        totalOutOfStock: outOfStockData.totalCount,
+        outOfStockItems: outOfStockData.outOfStockItems.slice(0, 10).map((item: any) => ({
+          pharmacyName: item.pharmacyName,
+          medicineName: item.medicineName,
+          lastUpdated: item.lastUpdated.toLocaleString()
+        })),
+        dashboardUrl: window.location.origin + '/admin'
+      };
+      
+      const emailSent = await emailService.sendOutOfStockAlert(emailData);
+      
+      if (!emailSent) {
+        console.warn('Email notification failed, but continuing with notification process');
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error sending out of stock notification:', error);
+      return false;
+    }
+  }
+
   // Real-time listeners
   onStockChange(pharmacyId: string, callback: (stock: Stock[]) => void): () => void {
     const stockQuery = query(
@@ -614,6 +843,48 @@ export class FirebaseService {
       });
       callback(stock);
     });
+  }
+
+  // Real-time listener for out-of-stock notifications
+  onOutOfStockChange(callback: (notifications: any) => void): () => void {
+    const pharmaciesQuery = query(collection(db, COLLECTIONS.PHARMACIES));
+    
+    return onSnapshot(pharmaciesQuery, async () => {
+      try {
+        const notifications = await this.checkOutOfStockNotifications();
+        callback(notifications);
+      } catch (error) {
+        console.error('Error in out of stock listener:', error);
+      }
+    });
+  }
+
+  // Test method to simulate out-of-stock notifications (for development/testing)
+  async testOutOfStockNotification(adminEmail: string): Promise<boolean> {
+    try {
+      const testData = {
+        outOfStockItems: [
+          {
+            pharmacyId: 'test-pharmacy-1',
+            pharmacyName: 'Test Pharmacy 1',
+            medicineName: 'Paracetamol 500mg',
+            lastUpdated: new Date()
+          },
+          {
+            pharmacyId: 'test-pharmacy-2',
+            pharmacyName: 'Test Pharmacy 2',
+            medicineName: 'Amoxicillin 250mg',
+            lastUpdated: new Date()
+          }
+        ],
+        totalCount: 2
+      };
+      
+      return await this.sendOutOfStockNotification(adminEmail, testData);
+    } catch (error) {
+      console.error('Error testing out of stock notification:', error);
+      return false;
+    }
   }
 }
 

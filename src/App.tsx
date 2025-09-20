@@ -7,6 +7,7 @@ import { PharmacyDashboard } from './components/Pharmacy/PharmacyDashboard';
 import { UpdateStock } from './components/Pharmacy/UpdateStock';
 import { AdminDashboard } from './components/Admin/AdminDashboard';
 import { ReportsAnalytics } from './components/Admin/ReportsAnalytics';
+import { Header } from './components/Layout/Header';
 import { storage } from './utils/storage';
 import type { Stock, Pharmacy } from './types';
 

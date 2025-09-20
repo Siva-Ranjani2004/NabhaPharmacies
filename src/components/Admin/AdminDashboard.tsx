@@ -8,6 +8,7 @@ import { useLanguage } from '../../hooks/useLanguage';
 import { t } from '../../utils/translations';
 import { api } from '../../utils/api';
 import { emailService } from '../../services/email-service';
+import { firebaseService } from '../../services/firebase-service';
 import type { Pharmacy, RegistrationRequest } from '../../types';
 import { 
   Search, 
@@ -17,7 +18,9 @@ import {
   Eye,
   Check,
   X,
-  TestTube
+  TestTube,
+  AlertTriangle,
+  Bell
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -29,15 +32,35 @@ interface AdminDashboardProps {
 export function AdminDashboard({ onPharmacyDetail, onReports, onHomeClick }: AdminDashboardProps) {
   const { user } = useAuth();
   const { language } = useLanguage();
-  const [activeTab, setActiveTab] = useState<'overview' | 'requests'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'notifications'>('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [pharmacies, setPharmacies] = useState<Pharmacy[]>([]);
   const [requests, setRequests] = useState<RegistrationRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [testingEmail, setTestingEmail] = useState(false);
+  const [outOfStockNotifications, setOutOfStockNotifications] = useState<{
+    outOfStockItems: Array<{
+      pharmacyId: string;
+      pharmacyName: string;
+      medicineName: string;
+      lastUpdated: Date;
+    }>;
+    totalCount: number;
+  }>({ outOfStockItems: [], totalCount: 0 });
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
 
   useEffect(() => {
     loadData();
+    loadOutOfStockNotifications();
+    
+    // Set up real-time listener for out-of-stock notifications
+    const unsubscribe = firebaseService.onOutOfStockChange((notifications) => {
+      setOutOfStockNotifications(notifications);
+    });
+    
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const loadData = async () => {
@@ -53,6 +76,37 @@ export function AdminDashboard({ onPharmacyDetail, onReports, onHomeClick }: Adm
       console.error('Failed to load admin data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadOutOfStockNotifications = async () => {
+    try {
+      setNotificationsLoading(true);
+      const notifications = await firebaseService.checkOutOfStockNotifications();
+      setOutOfStockNotifications(notifications);
+    } catch (error) {
+      console.error('Failed to load out of stock notifications:', error);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  const sendOutOfStockEmailAlert = async () => {
+    if (!user?.email) {
+      alert('Admin email not found');
+      return;
+    }
+    
+    try {
+      const success = await firebaseService.sendOutOfStockNotification(user.email, outOfStockNotifications);
+      if (success) {
+        alert('Out of stock alert sent successfully!');
+      } else {
+        alert('Failed to send out of stock alert');
+      }
+    } catch (error) {
+      console.error('Error sending out of stock alert:', error);
+      alert('Error sending out of stock alert');
     }
   };
 
@@ -146,9 +200,9 @@ export function AdminDashboard({ onPharmacyDetail, onReports, onHomeClick }: Adm
                   <div className="text-3xl lg:text-4xl font-bold text-orange-600 mb-3">{pendingRequests.length}</div>
                   <div className="text-sm lg:text-base text-gray-600 font-medium">{t('pending_requests', language)}</div>
               </Card>
-                <Card className="text-center p-6 lg:p-8 shadow-lg hover:shadow-xl transition-shadow duration-300 bg-white border-0 hidden lg:block">
-                  <div className="text-3xl lg:text-4xl font-bold text-blue-600 mb-3">{totalPharmacies}</div>
-                  <div className="text-sm lg:text-base text-gray-600 font-medium">Total Pharmacies</div>
+                <Card className="text-center p-6 lg:p-8 shadow-lg hover:shadow-xl transition-shadow duration-300 bg-white border-0">
+                  <div className="text-3xl lg:text-4xl font-bold text-red-600 mb-3">{outOfStockNotifications.totalCount}</div>
+                  <div className="text-sm lg:text-base text-gray-600 font-medium">Out of Stock</div>
               </Card>
                 <Card className="text-center p-6 lg:p-8 shadow-lg hover:shadow-xl transition-shadow duration-300 bg-white border-0 hidden lg:block">
                   <div className="text-3xl lg:text-4xl font-bold text-purple-600 mb-3">
@@ -161,7 +215,7 @@ export function AdminDashboard({ onPharmacyDetail, onReports, onHomeClick }: Adm
 
             {/* Tab Navigation */}
             <div className="w-full">
-              <div className="flex bg-white rounded-xl p-1 shadow-lg w-full max-w-2xl mx-auto">
+              <div className="flex bg-white rounded-xl p-1 shadow-lg w-full max-w-4xl mx-auto">
               <button
                 onClick={() => setActiveTab('overview')}
                   className={`flex-1 py-4 px-6 rounded-lg text-sm lg:text-base font-semibold transition-all duration-300 min-h-[48px] ${
@@ -184,6 +238,22 @@ export function AdminDashboard({ onPharmacyDetail, onReports, onHomeClick }: Adm
                 {pendingRequests.length > 0 && (
                     <span className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
                     {pendingRequests.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('notifications')}
+                className={`flex-1 py-4 px-6 rounded-lg text-sm lg:text-base font-semibold transition-all duration-300 min-h-[48px] relative ${
+                  activeTab === 'notifications'
+                      ? 'bg-green-600 text-white shadow-md'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
+              >
+                <Bell className="w-4 h-4 inline mr-2" />
+                Out of Stock
+                {outOfStockNotifications.totalCount > 0 && (
+                    <span className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                    {outOfStockNotifications.totalCount}
                   </span>
                 )}
               </button>
@@ -343,6 +413,100 @@ export function AdminDashboard({ onPharmacyDetail, onReports, onHomeClick }: Adm
               </div>
             )}
 
+            {activeTab === 'notifications' && (
+              <div className="w-full">
+                <div className="space-y-6 w-full max-w-6xl mx-auto">
+                  {/* Header with action buttons */}
+                  <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900 mb-2">Out of Stock Notifications</h3>
+                      <p className="text-gray-600">
+                        {outOfStockNotifications.totalCount} medicines are currently out of stock across pharmacies
+                      </p>
+                    </div>
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={loadOutOfStockNotifications}
+                        variant="secondary"
+                        size="sm"
+                        loading={notificationsLoading}
+                        className="flex items-center"
+                      >
+                        <Bell className="w-4 h-4 mr-2" />
+                        Refresh
+                      </Button>
+                      <Button
+                        onClick={sendOutOfStockEmailAlert}
+                        variant="primary"
+                        size="sm"
+                        className="flex items-center"
+                        disabled={outOfStockNotifications.totalCount === 0}
+                      >
+                        <AlertTriangle className="w-4 h-4 mr-2" />
+                        Send Email Alert
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Notifications List */}
+                  {notificationsLoading ? (
+                    <Card className="p-8">
+                      <div className="animate-pulse space-y-4">
+                        <div className="h-6 bg-gray-200 rounded w-3/4 mx-auto"></div>
+                        <div className="h-4 bg-gray-200 rounded w-1/2 mx-auto"></div>
+                      </div>
+                    </Card>
+                  ) : outOfStockNotifications.totalCount === 0 ? (
+                    <Card className="text-center py-12 bg-white shadow-lg">
+                      <Check className="w-16 h-16 lg:w-20 lg:h-20 text-green-400 mx-auto mb-6" />
+                      <h3 className="text-xl font-semibold text-gray-700 mb-2">All medicines are in stock!</h3>
+                      <p className="text-gray-500">No out-of-stock notifications at this time</p>
+                    </Card>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {outOfStockNotifications.outOfStockItems.slice(0, 20).map((item, index) => (
+                        <Card key={index} className="p-6 bg-white shadow-lg border-0 hover:shadow-xl transition-shadow duration-300">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center mb-3">
+                                <AlertTriangle className="w-5 h-5 text-red-500 mr-2" />
+                                <h4 className="font-bold text-gray-900 text-lg">{item.medicineName}</h4>
+                              </div>
+                              <p className="text-gray-600 mb-2 font-medium">{item.pharmacyName}</p>
+                              <p className="text-sm text-gray-500">
+                                Last updated: {item.lastUpdated.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="ml-4">
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-red-100 text-red-800">
+                                Out of Stock
+                              </span>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Show more button if there are more items */}
+                  {outOfStockNotifications.totalCount > 20 && (
+                    <div className="text-center">
+                      <p className="text-gray-500 mb-4">
+                        Showing first 20 of {outOfStockNotifications.totalCount} out-of-stock items
+                      </p>
+                      <Button
+                        onClick={loadOutOfStockNotifications}
+                        variant="ghost"
+                        className="text-green-600 hover:text-green-700"
+                      >
+                        Load All Items
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Quick Actions */}
             <div className="w-full">
               <Card className="p-6 lg:p-8 bg-white shadow-lg border-0 w-full max-w-2xl mx-auto">
@@ -367,6 +531,23 @@ export function AdminDashboard({ onPharmacyDetail, onReports, onHomeClick }: Adm
                 >
                     <TestTube className="w-5 h-5 mr-3" />
                   Test Email Service
+                </Button>
+                
+                <Button
+                  onClick={async () => {
+                    if (!user?.email) {
+                      alert('Admin email not found');
+                      return;
+                    }
+                    const success = await firebaseService.testOutOfStockNotification(user.email);
+                    alert(success ? 'Test notification sent successfully!' : 'Test notification failed');
+                  }}
+                  variant="ghost"
+                  fullWidth
+                  className="justify-center py-4 text-lg font-semibold"
+                >
+                    <AlertTriangle className="w-5 h-5 mr-3" />
+                  Test Out-of-Stock Alert
                 </Button>
               </div>
             </Card>

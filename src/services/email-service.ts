@@ -10,6 +10,18 @@ export interface CredentialsEmailData {
   adminEmail: string;
 }
 
+export interface OutOfStockEmailData {
+  adminEmail: string;
+  adminName: string;
+  totalOutOfStock: number;
+  outOfStockItems: Array<{
+    pharmacyName: string;
+    medicineName: string;
+    lastUpdated: string;
+  }>;
+  dashboardUrl: string;
+}
+
 export class EmailService {
   private isInitialized = false;
 
@@ -157,6 +169,50 @@ export class EmailService {
     }
   }
 
+  async sendOutOfStockAlert(data: OutOfStockEmailData): Promise<boolean> {
+    if (!this.isInitialized) {
+      console.error('EmailJS not initialized');
+      return false;
+    }
+
+    try {
+      const templateParams = {
+        to_email: data.adminEmail,
+        to_name: data.adminName,
+        total_out_of_stock: data.totalOutOfStock,
+        out_of_stock_items: data.outOfStockItems.map(item => 
+          `${item.pharmacyName}: ${item.medicineName} (Updated: ${item.lastUpdated})`
+        ).join('\n'),
+        dashboard_url: data.dashboardUrl,
+        support_email: 'admin@nabha.gov.in',
+        // Add explicit recipient fields for EmailJS
+        user_email: data.adminEmail,
+        recipient_email: data.adminEmail,
+        email: data.adminEmail
+      };
+
+      console.log('Sending out of stock alert with params:', templateParams);
+
+      const result = await emailjs.send(
+        EMAIL_CONFIG.SERVICE_ID,
+        EMAIL_CONFIG.TEMPLATE_ID_OUT_OF_STOCK || EMAIL_CONFIG.TEMPLATE_ID_CREDENTIALS, // Fallback to credentials template
+        templateParams
+      );
+
+      console.log('Out of stock alert sent successfully:', result);
+      return true;
+    } catch (error) {
+      console.error('Failed to send out of stock alert:', error);
+      console.error('Error details:', {
+        message: error.message,
+        status: error.status,
+        text: error.text,
+        response: error.response
+      });
+      return false;
+    }
+  }
+
   // Fallback method using mailto link
   generateCredentialsMailto(data: CredentialsEmailData): string {
     const subject = `Your Pharmacy Account Credentials - ${data.pharmacyName}`;
@@ -183,6 +239,30 @@ Nabha Civil Hospital Admin
     `.trim();
 
     return `mailto:${data.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+
+  // Fallback method for out of stock notifications
+  generateOutOfStockMailto(data: OutOfStockEmailData): string {
+    const subject = `Out of Stock Alert - ${data.totalOutOfStock} medicines need attention`;
+    const body = `
+Dear ${data.adminName},
+
+This is an automated alert regarding out-of-stock medicines across pharmacies.
+
+Total Out of Stock Medicines: ${data.totalOutOfStock}
+
+Out of Stock Items:
+${data.outOfStockItems.map(item => 
+  `• ${item.pharmacyName}: ${item.medicineName} (Updated: ${item.lastUpdated})`
+).join('\n')}
+
+Please check the admin dashboard for more details: ${data.dashboardUrl}
+
+Best regards,
+Nabha Pharmacies System
+    `.trim();
+
+    return `mailto:${data.adminEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 }
 

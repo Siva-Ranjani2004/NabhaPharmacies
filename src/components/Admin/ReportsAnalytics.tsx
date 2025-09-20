@@ -5,6 +5,7 @@ import { Button } from '../UI/Button';
 import { Input } from '../UI/Input';
 import { useLanguage } from '../../hooks/useLanguage';
 import { t } from '../../utils/translations';
+import { firebaseService } from '../../services/firebase-service';
 import { 
   BarChart3, 
   LineChart, 
@@ -87,11 +88,40 @@ export function ReportsAnalytics({ onBack, onHomeClick, onReportsClick }: Report
   const generateReport = async () => {
     setLoading(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setReportData(mockReportData);
+      // Calculate date range based on report type
+      let dateRange: { start: Date; end: Date } | undefined;
+      
+      if (customDateRange.start && customDateRange.end) {
+        dateRange = {
+          start: new Date(customDateRange.start),
+          end: new Date(customDateRange.end)
+        };
+      } else {
+        const now = new Date();
+        const start = new Date();
+        
+        switch (reportType) {
+          case 'daily':
+            start.setDate(now.getDate() - 1);
+            break;
+          case 'weekly':
+            start.setDate(now.getDate() - 7);
+            break;
+          case 'monthly':
+            start.setMonth(now.getMonth() - 1);
+            break;
+        }
+        
+        dateRange = { start, end: now };
+      }
+      
+      // Fetch real data from Firebase
+      const analyticsData = await firebaseService.getAnalyticsData(dateRange);
+      setReportData(analyticsData);
     } catch (error) {
       console.error('Failed to generate report:', error);
+      // Fallback to mock data if Firebase fails
+      setReportData(mockReportData);
     } finally {
       setLoading(false);
     }
